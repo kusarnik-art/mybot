@@ -17,15 +17,34 @@ GOOGLE_API_KEY = os.getenv("AIzaSyAoYb8sy7u8CGC1paTLGVNJ7XZRJka-a6g")
 if not TELEGRAM_TOKEN or not GOOGLE_API_KEY:
     print("❌ ОШИБКА: Переменные TELEGRAM_TOKEN или GOOGLE_API_KEY не заданы в настройках Render!")
 
-# Настройка Gemini
+# --- Настройка Gemini ---
 genai.configure(api_key=GOOGLE_API_KEY)
 
-# Используем максимально точное имя модели
-try:
-    model = genai.GenerativeModel('gemini-1.0-pro') 
-except:
-    model = genai.GenerativeModel('models/gemini-1.0-pro')
+def get_available_model():
+    # Список моделей от самой новой к самой стабильной
+    models_to_try = [
+        'gemini-1.5-flash',
+        'models/gemini-1.5-flash',
+        'gemini-pro',
+        'models/gemini-pro'
+    ]
+    
+    for m in models_to_try:
+        try:
+            test_model = genai.GenerativeModel(m)
+            # Пробный запрос, чтобы убедиться, что модель доступна
+            test_model.generate_content("Hi", generation_config={"max_output_tokens": 1})
+            print(f"✅ Выбрана работающая модель: {m}")
+            return test_model
+        except Exception as e:
+            print(f"⚠️ Модель {m} недоступна: {e}")
+            continue
+    return None
 
+model = get_available_model()
+
+if model is None:
+    print("❌ КРИТИЧЕСКАЯ ОШИБКА: Ни одна модель Google Gemini не доступна!")
 # Остальной код без изменений...
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
