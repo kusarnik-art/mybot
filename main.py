@@ -10,8 +10,8 @@ from aiohttp import web
 logging.basicConfig(level=logging.INFO)
 
 # ПОЛУЧАЕМ ТОКЕНЫ
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+TELEGRAM_TOKEN = os.getenv("8511912777:AAHhUtLcjs8-6aW_ls81ONjXCKgYlVx8fcU")
+GOOGLE_API_KEY = os.getenv("AIzaSyAoYb8sy7u8CGC1paTLGVNJ7XZRJka-a6g")
 
 # ПРОВЕРКА НАЛИЧИЯ КЛЮЧЕЙ
 if not TELEGRAM_TOKEN or not GOOGLE_API_KEY:
