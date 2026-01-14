@@ -19,8 +19,10 @@ if not TELEGRAM_TOKEN or not GOOGLE_API_KEY:
 
 # Настройка Gemini
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
-
+# Замени старую строку на эту:
+model = genai.GenerativeModel(
+    model_name='models/gemini-1.5-flash-latest' # Добавили префикс models/ и -latest
+)
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
