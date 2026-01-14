@@ -6,47 +6,44 @@ from aiogram.filters import Command
 import google.generativeai as genai
 from aiohttp import web
 
-# Включаем логирование, чтобы видеть ошибки в панели Render
+# Логирование
 logging.basicConfig(level=logging.INFO)
 
 # ПОЛУЧАЕМ ТОКЕНЫ
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-PORT = os.getenv("PORT")
 
-# ПРОВЕРКА НАЛИЧИЯ КЛЮЧЕЙ
-if not TELEGRAM_TOKEN or not GOOGLE_API_KEY:
-    print("❌ ОШИБКА: Переменные TELEGRAM_TOKEN или GOOGLE_API_KEY не заданы в настройках Render!")
-
-# --- Настройка Gemini ---
+# Настройка Gemini
 genai.configure(api_key=GOOGLE_API_KEY)
 
 def get_available_model():
-    # Список моделей от самой новой к самой стабильной
+    """Автоматический подбор рабочей модели"""
+    # Сначала пробуем самые стабильные варианты имен
     models_to_try = [
         'gemini-1.5-flash',
         'models/gemini-1.5-flash',
-        'gemini-pro',
-        'models/gemini-pro'
+        'gemini-1.5-pro',
+        'gemini-pro'
     ]
     
-    for m in models_to_try:
+    for m_name in models_to_try:
         try:
-            test_model = genai.GenerativeModel(m)
-            # Пробный запрос, чтобы убедиться, что модель доступна
-            test_model.generate_content("Hi", generation_config={"max_output_tokens": 1})
-            print(f"✅ Выбрана работающая модель: {m}")
-            return test_model
+            m = genai.GenerativeModel(m_name)
+            # Тестовый микро-запрос для проверки доступности
+            m.generate_content("test", generation_config={"max_output_tokens": 1})
+            logging.info(f"✅ Успешно подключена модель: {m_name}")
+            return m
         except Exception as e:
-            print(f"⚠️ Модель {m} недоступна: {e}")
+            logging.warning(f"⚠️ Модель {m_name} недоступна: {e}")
             continue
     return None
 
+# Инициализация модели
 model = get_available_model()
 
 if model is None:
-    print("❌ КРИТИЧЕСКАЯ ОШИБКА: Ни одна модель Google Gemini не доступна!")
-# Остальной код без изменений...
+    logging.error("❌ КРИТИЧЕСКАЯ ОШИБКА: Ни одна модель Gemini не ответила. Проверьте API ключ!")
+
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
@@ -62,38 +59,60 @@ async def start_webserver():
     port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    print(f"✅ Веб-сервер запущен на порту {port}")
+    logging.info(f"✅ Веб-сервер на порту {port}")
 
-# --- Логика ---
+# --- Логика бота ---
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer("🤖 Бот на Gemini запущен! Присылай задачу.")
+    await message.answer("🤖 Бот на Google Gemini запущен и готов решать задачи по фото и тексту!")
 
 @dp.message(F.text)
 async def handle_text(message: types.Message):
+    if model is None:
+        await message.answer("Ошибка: Модель ИИ не настроена. Проверьте логи сервера.")
+        return
+    
+    await bot.send_chat_action(message.chat.id, "typing")
     try:
-        response = model.generate_content(f"Реши задачу (без LaTeX): {message.text}")
+        # Улучшенный промпт для математики
+        prompt = f"Ты учитель. Реши задачу подробно. НЕ ИСПОЛЬЗУЙ LaTeX (символы $, \, {{}}). Пиши словами: корень, степень, угол. Задача: {message.text}"
+        response = model.generate_content(prompt)
         await message.answer(response.text)
     except Exception as e:
-        await message.answer(f"Ошибка: {e}")
+        logging.error(f"Ошибка текста: {e}")
+        await message.answer(f"Произошла ошибка: {str(e)}")
 
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
+    if model is None:
+        await message.answer("Ошибка: Модель ИИ не настроена.")
+        return
+
+    await bot.send_chat_action(message.chat.id, "typing")
     try:
         photo = message.photo[-1]
         file_info = await bot.get_file(photo.file_id)
         downloaded_file = await bot.download_file(file_info.file_path)
         img_data = downloaded_file.read()
         
-        response = model.generate_content(["Реши задачу на фото (без LaTeX)", {'mime_type': 'image/jpeg', 'data': img_data}])
+        # Передаем картинку правильно
+        img_part = {'mime_type': 'image/jpeg', 'data': img_data}
+        prompt = "Ты учитель. Реши задачу на фото максимально подробно. Пиши только словами, БЕЗ LaTeX символов."
+        
+        response = model.generate_content([prompt, img_part])
         await message.answer(response.text)
     except Exception as e:
-        await message.answer(f"Ошибка фото: {e}")
+        logging.error(f"Ошибка фото: {e}")
+        await message.answer("Не удалось обработать фото. Попробуйте отправить текст или другое фото.")
 
 async def main():
+    # Запускаем сервер и бота
     asyncio.create_task(start_webserver())
-    print("🚀 Запуск бота...")
+    logging.info("🚀 Запуск Polling...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Бот остановлен.")
